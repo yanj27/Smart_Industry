@@ -27,29 +27,31 @@ data = images.reshape(-1, 28, 28, 1)
 
 @tf.keras.utils.register_keras_serializable()
 class Autoencoder(tf.keras.Model):
-    def __init__(self, latent_dim):
-            super(Autoencoder, self).__init__()
-            self.latent_dim = latent_dim
-            self.encoder = tf.keras.Sequential([
-                layers.Flatten(input_shape=(28, 28)),
-                layers.Dense(32, activation="relu"),
-                layers.Dense(16, activation="relu"),
-                layers.Dense(8, activation="relu"),
-                layers.Dense(latent_dim, activation="relu")
-            ])
+    def __init__(self, latent_dim=64):
+        super(Autoencoder, self).__init__()
+        self.latent_dim = latent_dim
+        
+        # Encoder
+        self.encoder = tf.keras.Sequential([
+            layers.InputLayer(input_shape=(28, 28, 1)),
+            layers.Flatten(),
+            layers.Dense(128, activation='relu'),
+            layers.Dense(64, activation='relu'),
+            layers.Dense(latent_dim, activation='relu')
+        ])
 
-            self.decoder = tf.keras.Sequential([
-                layers.Dense(8, activation="relu"),
-                layers.Dense(16, activation="relu"),
-                layers.Dense(32, activation="relu"),
-                layers.Dense(784, activation="sigmoid"),
-                layers.Reshape((28, 28))
-            ])
+        # Decoder
+        self.decoder = tf.keras.Sequential([
+            layers.Dense(64, activation='relu', input_dim=latent_dim),
+            layers.Dense(128, activation='relu'),
+            layers.Dense(784, activation='sigmoid'),
+            layers.Reshape((28, 28, 1))
+        ])
 
     def call(self, x):
-            encoded = self.encoder(x)
-            decoded = self.decoder(encoded)
-            return decoded
+        encoded = self.encoder(x)
+        decoded = self.decoder(encoded)
+        return decoded
 
     def get_config(self):
         config = super(Autoencoder, self).get_config()
@@ -75,12 +77,9 @@ def train_autoencoder(x_train, x_test, latent_dim, num_epochs):
     autoencoder.save('autoencoder_model.keras')
     return autoencoder
 
-
 x_train, x_test = train_test_split(images, test_size=0.2, random_state=42)
 
-x_train = x_train.astype('float32') / 255
-x_test = x_test.astype('float32') / 255
-x_train = x_train.reshape(-1, 28, 28, 1)
-x_test = x_test.reshape(-1, 28, 28, 1)
+x_train = x_train / 255
+x_test = x_test / 255 
 
-train_autoencoder(x_train, x_test, latent_dim=64, num_epochs=10)
+train_autoencoder(x_train, x_test, latent_dim=64, num_epochs=150)

@@ -15,10 +15,10 @@ image_directory = 'images'
 image_files = [f for f in os.listdir(image_directory) if f.endswith(('.png', '.jpg', '.jpeg'))]
 
 def preprocess_image(image_path):
-    image = Image.open(image_path).convert('L')  # Convert to grayscale
-    image = image.resize((28, 28))  # Resize to 28x28 for the autoencoder
-    image_array = np.array(image).astype('float32') / 255.0  # Normalize
-    image_array = np.reshape(image_array, (1, 28, 28, 1))  # Add batch dimension
+    image = Image.open(image_path).convert('L')
+    image = image.resize((28, 28))
+    image_array = np.array(image).astype('float32') / 255
+    image_array = np.reshape(image_array, (1, 28, 28, 1))
     return image_array
 
 class AnomalyResponse(BaseModel):
