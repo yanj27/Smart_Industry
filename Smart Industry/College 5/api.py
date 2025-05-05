@@ -1,12 +1,10 @@
+import tensorflow as tf
 from fastapi import FastAPI
 from pydantic import BaseModel
 import numpy as np
 from PIL import Image
-import io
 import os
-import tensorflow as tf
-
-from autoencoder import Autoencoder 
+from autoencoder import Autoencoder
 
 autoencoder = tf.keras.models.load_model('autoencoder_model.keras', custom_objects={'Autoencoder': Autoencoder})
 
@@ -14,26 +12,26 @@ app = FastAPI()
 
 image_directory = 'images'
 
+image_files = [f for f in os.listdir(image_directory) if f.endswith(('.png', '.jpg', '.jpeg'))]
+
+def preprocess_image(image_path):
+    image = Image.open(image_path).convert('L')  # Convert to grayscale
+    image = image.resize((28, 28))  # Resize to 28x28 for the autoencoder
+    image_array = np.array(image).astype('float32') / 255.0  # Normalize
+    image_array = np.reshape(image_array, (1, 28, 28, 1))  # Add batch dimension
+    return image_array
+
 class AnomalyResponse(BaseModel):
     mse: float
     status: str
-    reconstructed_image: bytes
-
-def preprocess_image(image_path):
-    image = Image.open(image_path).convert('L')
-    image = image.resize((28, 28))
-    image_array = np.array(image).astype('float32') / 255
-    image_array = np.reshape(image_array, (1, 28, 28, 1))
-    return image_array, image
 
 @app.get("/predict_anomaly/{image_name}", response_model=AnomalyResponse)
 async def predict_anomaly(image_name: str):
-    image_path = os.path.join(image_directory, image_name)
-    
-    if not os.path.exists(image_path):
+    if image_name not in image_files:
         return {"error": "Image not found"}
-    
-    image_array, original_image = preprocess_image(image_path)
+
+    image_path = os.path.join(image_directory, image_name)
+    image_array = preprocess_image(image_path)
 
     reconstructed = autoencoder.predict(image_array)
 
@@ -42,9 +40,4 @@ async def predict_anomaly(image_name: str):
     threshold = 0.02
     status = "Anomaly" if mse > threshold else "Normal"
 
-    reconstructed_image_pil = Image.fromarray((reconstructed[0] * 255).astype(np.uint8))
-    img_byte_arr = io.BytesIO()
-    reconstructed_image_pil.save(img_byte_arr, format='PNG')
-    reconstructed_image_bytes = img_byte_arr.getvalue()
-
-    return AnomalyResponse(mse=mse[0], status=status, reconstructed_image=reconstructed_image_bytes)
+    return AnomalyResponse(mse=mse[0], status=status)
