@@ -10,10 +10,18 @@ import cv2
 import matplotlib.pyplot as plt
 
 autoencoder = tf.keras.models.load_model('autoencoder_model.keras', custom_objects={'Autoencoder': Autoencoder})
+denoiser = tf.keras.models.load_model('denoiser.keras')
 API_URL = "http://127.0.0.1:8000/predict_anomaly/"
 image_directory = 'images'
 images = []
 image_files = [f for f in os.listdir(image_directory) if f.endswith(('.png', '.jpg', '.jpeg'))]
+
+def add_gaussian_noise(image, mean=0, std=10):
+    noise = np.random.normal(mean, std, image.shape).astype(np.float32)
+    noisy_image = image.astype(np.float32) + noise
+    noisy_image = np.clip(noisy_image, 0, 255).astype(np.uint8)
+    return noisy_image
+
 
 def pixelate_center(image, blur_percentage=0.2):
     # Get the height and width of the image
@@ -97,9 +105,31 @@ if selected_image:
         st.write(f"Reconstruction Error (MSE): {mse:.4f}")
         st.write(f"Status: {status}")
         if status == 'Normal':
-                st.header("Normal")
-                plt.imshow(pred, cmap='gray')
-                st.pyplot(plt)
+            st.header("With Noise")
+            img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+            img = cv2.resize(img, (28, 28))
+            noisy_image = add_gaussian_noise(img, mean=0, std=10)
+
+            plt.figure()
+            plt.imshow(noisy_image, cmap='gray')
+            plt.axis('off')
+            st.pyplot(plt)
+
+            st.header("Without Noise")
+
+            # Proper preprocessing for Conv2D model
+            input_for_model = noisy_image.astype('float32') / 255.0
+            input_for_model = input_for_model.reshape(1, 28, 28, 1)
+
+            # Predict
+            denoised = denoiser.predict(input_for_model)
+            denoised = denoised.reshape(28, 28)
+
+            plt.figure()
+            plt.imshow(denoised, cmap='gray')
+            plt.axis('off')
+            st.pyplot(plt)
+
         else:
                 st.header("Anomaly")
                 img = cv2.imread(image_path, cv2.IMREAD_COLOR)
