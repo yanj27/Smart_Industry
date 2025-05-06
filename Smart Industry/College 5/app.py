@@ -15,27 +15,41 @@ image_directory = 'images'
 images = []
 image_files = [f for f in os.listdir(image_directory) if f.endswith(('.png', '.jpg', '.jpeg'))]
 
-def anonymize_face_blur(image, blur_size=(50, 50)):
+def pixelate_center(image, blur_percentage=0.2):
     # Get the height and width of the image
     h, w = image.shape[:2]
 
     # Define the center of the image
     centerX, centerY = w // 2, h // 2
 
-    # Define the size of the region to blur (can adjust the size of the center blur)
-    startX = centerX - blur_size[0] // 2
-    startY = centerY - blur_size[1] // 2
-    endX = centerX + blur_size[0] // 2
-    endY = centerY + blur_size[1] // 2
+    # Define the size of the region to pixelate (scaled based on image size)
+    blur_width = int(w * blur_percentage)
+    blur_height = int(h * blur_percentage)
+
+    # Define the coordinates for the region to pixelate
+    startX = centerX - blur_width // 2
+    startY = centerY - blur_height // 2
+    endX = centerX + blur_width // 2
+    endY = centerY + blur_height // 2
 
     # Extract the region of interest (ROI) centered in the image
     roi = image[startY:endY, startX:endX]
 
-    # Apply Gaussian blur to the ROI
-    blurred_roi = cv2.GaussianBlur(roi, (15, 15), 0)
+    # Apply pixelation to the ROI by dividing the region into blocks
+    block_size = 10  # Set block size (can adjust)
+    for i in range(0, roi.shape[0], block_size):
+        for j in range(0, roi.shape[1], block_size):
+            # Get the block from the region
+            block = roi[i:i+block_size, j:j+block_size]
+            
+            # Compute the average color of the block (mean pixel value)
+            avg_color = np.mean(block, axis=(0, 1), dtype=int)
+            
+            # Set the block to the average color
+            roi[i:i+block_size, j:j+block_size] = avg_color
 
-    # Replace the original region with the blurred ROI
-    image[startY:endY, startX:endX] = blurred_roi
+    # Place the pixelated region back into the image
+    image[startY:endY, startX:endX] = roi
 
     return image
 
@@ -90,7 +104,7 @@ if selected_image:
                 st.header("Anomaly")
                 img = cv2.imread(image_path, cv2.IMREAD_COLOR)
                 
-                img_blurred = anonymize_face_blur(img, blur_size=(100, 100))
+                img_blurred = pixelate_center(img, blur_percentage=0.5)
                 
                 img_rgb = cv2.cvtColor(img_blurred, cv2.COLOR_BGR2RGB)
                 
