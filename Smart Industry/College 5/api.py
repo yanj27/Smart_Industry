@@ -37,7 +37,9 @@ async def predict_anomaly(image_name: str):
 
     mse = np.mean(np.square(image_array - reconstructed), axis=(1, 2, 3))
 
-    threshold = 0.02
+
+    with open('threshold_value.txt', 'r') as f:
+        threshold = float(f.read())
     status = "Anomaly" if mse > threshold else "Normal"
 
     return AnomalyResponse(mse=mse[0], status=status)
