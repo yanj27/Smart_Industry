@@ -15,13 +15,36 @@ image_directory = 'images'
 images = []
 image_files = [f for f in os.listdir(image_directory) if f.endswith(('.png', '.jpg', '.jpeg'))]
 
-def get_image(image_name):
-    image = cv2.imread(image_name, cv2.IMREAD_GRAYSCALE)
-    image = Image.fromarray(image)
-    image = np.array((image.resize((28,28), Image.LANCZOS)))
-    image = np.array(image).astype('float32') / 255.0
-    image = np.reshape(image, (1, 28, 28, 1))
-    return image        
+def anonymize_face_blur(image, blur_size=(50, 50)):
+    # Get the height and width of the image
+    h, w = image.shape[:2]
+
+    # Define the center of the image
+    centerX, centerY = w // 2, h // 2
+
+    # Define the size of the region to blur (can adjust the size of the center blur)
+    startX = centerX - blur_size[0] // 2
+    startY = centerY - blur_size[1] // 2
+    endX = centerX + blur_size[0] // 2
+    endY = centerY + blur_size[1] // 2
+
+    # Extract the region of interest (ROI) centered in the image
+    roi = image[startY:endY, startX:endX]
+
+    # Apply Gaussian blur to the ROI
+    blurred_roi = cv2.GaussianBlur(roi, (15, 15), 0)
+
+    # Replace the original region with the blurred ROI
+    image[startY:endY, startX:endX] = blurred_roi
+
+    return image
+
+def preprocess_image(image_path):
+    image = Image.open(image_path).convert('L')
+    image = image.resize((28, 28))
+    image_array = np.array(image).astype('float32') / 255
+    image_array = np.reshape(image_array, (1, 28, 28, 1))
+    return image_array      
 
 
 st.title('Autoencoder Anomaly Detection via API')
@@ -35,7 +58,7 @@ if selected_image:
     original_image = Image.open(image_path)
     st.image(original_image, caption=f"Original Image: {selected_image}", use_container_width=True)
 
-    image = get_image(image_path)
+    image = preprocess_image(image_path)
 
     image_resized = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     image_resized = cv2.resize(image_resized, (28, 28))
@@ -60,12 +83,18 @@ if selected_image:
         st.write(f"Reconstruction Error (MSE): {mse:.4f}")
         st.write(f"Status: {status}")
         if status == 'Normal':
-                st.header("Decoder")
-                plt.imshow(decoded_image, cmap='gray')
+                st.header("Normal")
+                plt.imshow(pred, cmap='gray')
                 st.pyplot(plt)
         else:
-                st.header("Encoder")
-                plt.imshow(image_resized[0, :, :, 0], cmap='gray')
+                st.header("Anomaly")
+                img = cv2.imread(image_path, cv2.IMREAD_COLOR)
+                
+                img_blurred = anonymize_face_blur(img, blur_size=(100, 100))
+                
+                img_rgb = cv2.cvtColor(img_blurred, cv2.COLOR_BGR2RGB)
+                
+                plt.imshow(img_rgb)
                 st.pyplot(plt)
     else:
         st.error("Error occurred while processing the image.")
