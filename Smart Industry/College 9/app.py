@@ -17,7 +17,8 @@ if uploaded_video is not None:
         
         st.video(uploaded_video)
 
-        if st.button("Maak een motion mask"):
+        # Motion mask video
+        if st.button("Maak een motion mask video"):
             with st.spinner("Even geduld..."):
                 response = requests.post(
                     "http://localhost:8000/create_motion_mask/",
@@ -25,9 +26,24 @@ if uploaded_video is not None:
                 )
 
             if response.status_code == 200:
-                st.success("Received motion mask video!")
+                st.success("Motion mask video gemaakt!")
 
                 st.video(response.content)
+            else:
+                st.error(f"Upload failed with status code {response.status_code}")
+
+        # Background subtraction
+        if st.button("Maak een background subtraction foto"):
+            with st.spinner("Even geduld..."):
+                response = requests.post(
+                    "http://localhost:8000/bgr_subtraction/",
+                    files = {"file": uploaded_video}
+                )
+
+            if response.status_code == 200:
+                st.success("Background subtraction foto gemaakt!")
+
+                st.image(response.content)
             else:
                 st.error(f"Upload failed with status code {response.status_code}")
 
