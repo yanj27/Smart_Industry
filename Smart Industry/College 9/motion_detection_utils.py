@@ -1,6 +1,8 @@
 import numpy as np
 import cv2
 from PIL import Image
+import glob
+import os
 
 def get_contour_detections(mask, thresh=400):
     """ Obtains initial proposed detections from contours discoverd on the mask. 
@@ -130,46 +132,29 @@ def non_max_suppression(boxes, scores, threshold=1e-1):
                 
     return boxes[keep]
 
-def non_max_suppression_2(boxes, scores, threshold=1e-1):
-    """
-    Perform non-max suppression on a set of bounding boxes and corresponding scores.
-    NOTE: Eventhough we only go through 2 loops here, this way is more complicated and slower!
-    Inputs:
-        boxes: a list of bounding boxes in the format [xmin, ymin, xmax, ymax]
-        scores: a list of corresponding scores 
-        threshold: the IoU (intersection-over-union) threshold for merging bounding boxes
-    Outputs:
-        boxes - non-max suppressed boxes
-    """
-    # Sort the boxes by score in descending order
-    boxes = boxes[np.argsort(scores)[::-1]]
+def get_mask(frame1, frame2, kernel=np.array((9,9), dtype=np.uint8)):
+    """ Obtains image mask
+        Inputs: 
+            frame1 - Grayscale frame at time t
+            frame2 - Grayscale frame at time t + 1
+            kernel - (NxN) array for Morphological Operations
+        Outputs: 
+            mask - Thresholded mask for moving pixels
+        """
+    frame_diff = cv2.subtract(frame2, frame1)
 
-    keep = list(range(0, len(boxes)))
-    for i in keep:
-        for j in range(0, len(bboxes)):
-            # check if box j is completely contained in box i
-            if np.all((np.array(boxes[j]) >= np.array(boxes[i])) == np.array([True, True, False, False])):
-                try:
-                    keep.remove(j)
-                except ValueError:
-                    continue
-            # if no overlap check IOU threshold
-            else:
-                # Calculate the IoU between the two boxes
-                intersection = max(0, min(boxes[i][2], boxes[j][2]) - max(boxes[i][0], boxes[j][0])) * \
-                            max(0, min(boxes[i][3], boxes[j][3]) - max(boxes[i][1], boxes[j][1]))
-                union = (boxes[i][2] - boxes[i][0]) * (boxes[i][3] - boxes[i][1]) + \
-                        (boxes[j][2] - boxes[j][0]) * (boxes[j][3] - boxes[j][1]) - intersection
-                iou = intersection / union
+    # blur the frame difference
+    frame_diff = cv2.medianBlur(frame_diff, 3)
+    
+    mask = cv2.adaptiveThreshold(frame_diff, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+                cv2.THRESH_BINARY_INV, 11, 3)
 
-                # Remove boxes with IoU greater than the threshold
-                # ensure that we don't remove larger boxes by checking (j > i)
-                if (iou > threshold) and (j > i):
-                    try:
-                        keep.remove(j)
-                    except ValueError:
-                        continue
-    return boxes[keep]
+    mask = cv2.medianBlur(mask, 3)
+
+    # morphological operations
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+    return mask
 
 def get_detections(frame1, frame2, bbox_thresh=400, nms_thresh=1e-3, mask_kernel=np.array((9,9), dtype=np.uint8)):
     """ Main function to get detections via Frame Differencing
@@ -218,3 +203,53 @@ def create_gif_from_images(save_path : str, image_path : str, ext : str) -> None
 
     pil_images[0].save(save_path, format='GIF', append_images=pil_images,
                        save_all=True, duration=50, loop=0)
+    
+def get_motion_mask(flow_mag, motion_thresh=1, kernel=np.ones((7,7))):
+    """ Obtains Detection Mask from Optical Flow Magnitude
+        Inputs:
+            flow_mag (array) Optical Flow magnitude
+            motion_thresh - thresold to determine motion
+            kernel - kernal for Morphological Operations
+        Outputs:
+            motion_mask - Binray Motion Mask
+        """
+    motion_mask = np.uint8(flow_mag > motion_thresh)*255
+
+    motion_mask = cv2.erode(motion_mask, kernel, iterations=1)
+    motion_mask = cv2.morphologyEx(motion_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    motion_mask = cv2.morphologyEx(motion_mask, cv2.MORPH_CLOSE, kernel, iterations=3)
+    
+    return motion_mask
+
+def compute_flow(frame1, frame2):
+    # convert to grayscale
+    gray1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
+    gray2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+
+    # blurr image
+    gray1 = cv2.GaussianBlur(gray1, dst=None, ksize=(3,3), sigmaX=5)
+    gray2 = cv2.GaussianBlur(gray2, dst=None, ksize=(3,3), sigmaX=5)
+
+    flow = cv2.calcOpticalFlowFarneback(gray1, gray2, None,
+                                        pyr_scale=0.75,
+                                        levels=3,
+                                        winsize=5,
+                                        iterations=3,
+                                        poly_n=10,
+                                        poly_sigma=1.2,
+                                        flags=0)
+    return flow
+
+
+def get_flow_viz(flow):
+    """ Obtains BGR image to Visualize the Optical Flow 
+        """
+    hsv = np.zeros((flow.shape[0], flow.shape[1], 3), dtype=np.uint8)
+    hsv[..., 1] = 255
+
+    mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+    hsv[..., 0] = ang*180/np.pi/2
+    hsv[..., 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
+    rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+
+    return rgb
