@@ -181,6 +181,34 @@ def get_detections(frame1, frame2, bbox_thresh=400, nms_thresh=1e-3, mask_kernel
     # perform Non-Maximal Supression on initial detections
     return non_max_suppression(bboxes, scores, nms_thresh)
 
+def get_detections_bgr(backSub, frame, bbox_thresh=100, nms_thresh=0.1, kernel=np.array((9,9), dtype=np.uint8)):
+    """ Main function to get detections via Frame Differencing
+        Inputs:
+            backSub - Background Subtraction Model
+            frame - Current BGR Frame
+            bbox_thresh - Minimum threshold area for declaring a bounding box
+            nms_thresh - IOU threshold for computing Non-Maximal Supression
+            kernel - kernel for morphological operations on motion mask
+        Outputs:
+            detections - list with bounding box locations of all detections
+                bounding boxes are in the form of: (xmin, ymin, xmax, ymax)
+        """
+    # Update Background Model and get foreground mask
+    fg_mask = backSub.apply(frame)
+
+    # get clean motion mask
+    motion_mask = get_motion_mask(fg_mask, kernel=kernel)
+
+    # get initially proposed detections from contours
+    detections = get_contour_detections(motion_mask, bbox_thresh)
+
+    # separate bboxes and scores
+    bboxes = detections[:, :4]
+    scores = detections[:, -1]
+
+    # perform Non-Maximal Supression on initial detections
+    return non_max_suppression(bboxes, scores, nms_thresh)
+
 def draw_bboxes(frame, detections):
     for det in detections:
         x1,y1,x2,y2 = det
